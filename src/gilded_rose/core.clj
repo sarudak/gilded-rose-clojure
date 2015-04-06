@@ -1,36 +1,50 @@
 (ns gilded-rose.core)
 
+(def sulfuras "Sulfuras, Hand of Ragnaros")
+(def backstage-pass "Backstage passes to a TAFKAL80ETC concert")
+
+
+(defn Sulfuras? [item] (= sulfuras (:name item)))
+(defn backstage-pass? [item] (= backstage-pass (:name item)))
+
+(defn update-sellin-date [item]
+  (if (Sulfuras? item)
+    item
+    (update-in item [:sell-in] dec))
+  )
+
+(defn expired? [item] (> 0 (:sell-in item)))
+
+(defn inner-update-quality [item]  (cond
+            (Sulfuras? item) item
+            (backstage-pass? item)
+              (if (expired? item)
+                (merge item {:quality 0})
+                (if (and  (>= (:sell-in item) 5) (< (:sell-in item) 10))
+                  (merge item {:quality (inc (inc (:quality item)))})
+                  (if (and  (>= (:sell-in item) 0) (< (:sell-in item) 5))
+                    (merge item {:quality (inc (inc (inc (:quality item))))})
+                    (merge item {:quality (inc (:quality item))})))
+                )
+            (= (:name item) "Aged Brie")
+              (if (expired? item)
+                (update-in item [:quality] (comp inc inc))
+                (merge item {:quality (inc (:quality item))}))
+            (expired? item)
+              (merge item {:quality (- (:quality item) 2)})
+            :else
+              (merge item {:quality (dec (:quality item))})))
+
+(defn adhere-to-quality-bounds [item]
+  (if (Sulfuras? item)
+    item
+    (update-in item [:quality] (fn [x] (min 50 (max 0 x)))))
+  )
+
 (defn update-quality [items]
-  (map
-    (fn[item] (cond
-      (and (< (:sell-in item) 0) (= "Backstage passes to a TAFKAL80ETC concert" (:name item)))
-        (merge item {:quality 0})
-      (or (= (:name item) "Aged Brie") (= (:name item) "Backstage passes to a TAFKAL80ETC concert"))
-        (if (and (= (:name item) "Backstage passes to a TAFKAL80ETC concert") (>= (:sell-in item) 5) (< (:sell-in item) 10))
-          (merge item {:quality (min 50 (inc (inc (:quality item))))})
-          (if (and (= (:name item) "Backstage passes to a TAFKAL80ETC concert") (>= (:sell-in item) 0) (< (:sell-in item) 5))
-            (merge item {:quality (min 50 (inc (inc (inc (:quality item)))))})
-            (if (and (= (:name item) "Aged Brie") (< (:sell-in item) 0) (< (:quality item) 49))
-              (update-in item [:quality] (comp inc inc))
-              (if (< (:quality item) 50)
-                (merge item {:quality (inc (:quality item))})
-                item))))
-      (< (:sell-in item) 0)
-        (if (or (= "Backstage passes to a TAFKAL80ETC concert" (:name item))
-                (and (not= "Sulfuras, Hand of Ragnaros" (:name item))
-                     (< (:quality item) 3)))
-          (merge item {:quality 0})
-          (if (not= "Sulfuras, Hand of Ragnaros" (:name item))
-            (merge item {:quality (- (:quality item) 2)})
-            item))
-      (and (not= "Sulfuras, Hand of Ragnaros" (:name item)) (> (:quality item) 0))
-        (merge item {:quality (dec (:quality item))})
-      :else item))
-  (map (fn [item]
-      (if (not= "Sulfuras, Hand of Ragnaros" (:name item))
-        (merge item {:sell-in (dec (:sell-in item))})
-        item))
-  items)))
+  (map (comp adhere-to-quality-bounds inner-update-quality)
+       (map update-sellin-date items)
+    ))
 
 (defn item [item-name, sell-in, quality]
   {:name item-name, :sell-in sell-in, :quality quality})
