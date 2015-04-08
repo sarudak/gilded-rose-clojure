@@ -4,47 +4,56 @@
 (def backstage-pass "Backstage passes to a TAFKAL80ETC concert")
 
 
-(defn Sulfuras? [item] (= sulfuras (:name item)))
+(defn sulfuras? [item] (= sulfuras (:name item)))
 (defn backstage-pass? [item] (= backstage-pass (:name item)))
+(defn aged-brie? [item] (= "Aged Brie" (:name item)))
 
 (defn update-sellin-date [item]
-  (if (Sulfuras? item)
+  (if (sulfuras? item)
     item
     (update-in item [:sell-in] dec))
   )
 
 (defn expired? [item] (> 0 (:sell-in item)))
 
-(defn inner-update-quality [item]  (cond
-            (Sulfuras? item) item
-            (backstage-pass? item)
-              (if (expired? item)
-                (merge item {:quality 0})
-                (if (and  (>= (:sell-in item) 5) (< (:sell-in item) 10))
-                  (merge item {:quality (inc (inc (:quality item)))})
-                  (if (and  (>= (:sell-in item) 0) (< (:sell-in item) 5))
-                    (merge item {:quality (inc (inc (inc (:quality item))))})
-                    (merge item {:quality (inc (:quality item))})))
-                )
-            (= (:name item) "Aged Brie")
-              (if (expired? item)
-                (update-in item [:quality] (comp inc inc))
-                (merge item {:quality (inc (:quality item))}))
-            (expired? item)
-              (merge item {:quality (- (:quality item) 2)})
-            :else
-              (merge item {:quality (dec (:quality item))})))
+(defn sell-in-within-range? [item min max] (and (>= (:sell-in item) min) (< (:sell-in item) max)))
+
+(defn update-item-quality [item]
+  (let [quality-increases-by (fn [amount] (update-in item [:quality] (partial + amount)))
+        quality-decreases-by (fn [amount] (update-in item [:quality] (fn [x] (- x amount ))))
+        quality-becomes-zero (fn [] (assoc item :quality 0))]
+    (cond
+      (sulfuras? item) item
+      (backstage-pass? item)
+        (cond
+          (expired? item)
+            (quality-becomes-zero)
+          (sell-in-within-range? item 0 5)
+            (quality-increases-by 3)
+          (sell-in-within-range? item 5 10)
+            (quality-increases-by 2)
+          :else
+            (quality-increases-by 1))
+      (aged-brie? item)
+        (if (expired? item)
+          (quality-increases-by 2)
+          (quality-increases-by 1))
+      :else
+        (if (expired? item)
+          (quality-decreases-by 2)
+          (quality-decreases-by 1)))))
 
 (defn adhere-to-quality-bounds [item]
-  (if (Sulfuras? item)
+  (if (sulfuras? item)
     item
     (update-in item [:quality] (fn [x] (min 50 (max 0 x)))))
   )
 
 (defn update-quality [items]
-  (map (comp adhere-to-quality-bounds inner-update-quality)
-       (map update-sellin-date items)
-    ))
+  (map (comp adhere-to-quality-bounds
+             update-item-quality
+             update-sellin-date)
+       items))
 
 (defn item [item-name, sell-in, quality]
   {:name item-name, :sell-in sell-in, :quality quality})
